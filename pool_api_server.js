@@ -47,7 +47,7 @@ app.get('/poolList', async (req, res) => {
           name: pool.name || 'Unnamed Pool',
           status: pool.status,
           dataEndpoint: `${req.protocol}://${req.get('host')}/pool?systemId=${systemId}`,
-          controlEndpoint: `${req.protocol}://${req.get('host')}/control` // can be same for all
+          controlEndpoint: `${req.protocol}://${req.get('host')}/control`
         });
       }
     } catch (err) {
@@ -85,12 +85,43 @@ app.get('/pool', async (req, res) => {
   res.status(404).json({ error: 'Pool not found' });
 });
 
+// 📎 NEW: GET /poolByIndex?server=username&index=0 – fetch one pool by index
+app.get('/poolByIndex', async (req, res) => {
+  const { server, index } = req.query;
+  if (!server || index === undefined) {
+    return res.status(400).json({ error: 'Missing server or index' });
+  }
+
+  const system = poolSystems.find(p => p.username === server);
+  if (!system) return res.status(404).json({ error: 'Server not found' });
+
+  try {
+    const response = await axios.get(system.apiUrl);
+    const data = response.data;
+    const entries = Object.entries(data);
+    const entry = entries[parseInt(index)];
+
+    if (!entry) return res.status(404).json({ error: 'Index out of range' });
+
+    const [systemId, pool] = entry;
+    return res.json({
+      systemId,
+      name: pool.name,
+      status: pool.status,
+      ...pool.devices
+    });
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).json({ error: 'Failed to fetch pool data' });
+  }
+});
+
 // 🎮 POST /control – receive control command
 app.post('/control', async (req, res) => {
   const { systemId, action, value } = req.body;
   if (!systemId || !action) return res.status(400).json({ error: 'Missing systemId or action' });
 
-  const system = poolSystems.find(p => p.apiUrl.includes(systemId.slice(0, 6))); // crude match
+  const system = poolSystems.find(p => p.apiUrl.includes(systemId.slice(0, 6)));
   if (!system) return res.status(404).json({ error: 'System not found' });
 
   try {
